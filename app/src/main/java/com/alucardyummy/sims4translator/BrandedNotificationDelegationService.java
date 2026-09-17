@@ -1,6 +1,7 @@
 package com.alucardyummy.sims4translator;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.graphics.Color;
@@ -40,6 +41,16 @@ public class BrandedNotificationDelegationService extends DelegationService {
             // recoverBuilder só existe a partir do Android 7 (API 24)
             Notification.Builder builder = Notification.Builder.recoverBuilder(this, notification);
             builder.setColor(BRAND_COLOR);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Sem isso, notify() posta num canal que não existe e o
+                // Android descarta a notificação sem avisar nada.
+                builder.setChannelId(channelName);
+                NotificationChannel channel = new NotificationChannel(
+                        channelName, channelName, NotificationManager.IMPORTANCE_DEFAULT);
+                notificationManager.createNotificationChannel(channel);
+            }
+
             notification = builder.build();
         } else {
             // No Android 5 e 6, o campo "color" já existe e pode ser setado direto
