@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Necessária a partir do Android 13 (API 33) pra quem posta a notificação
+         (agora o app, via delegação) — sem isso a delegação funciona mas a
+         notificação some -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -46,10 +50,24 @@
             </intent-filter>
         </activity>
 
-        <!-- Serviço que mantém a sessão do Chrome viva em segundo plano -->
+        <!-- Delega a exibição das notificações pro app: sem o intent-filter e o
+             SMALL_ICON abaixo, o Chrome não descobre esse serviço e acaba
+             mostrando as notificações por conta própria (ícone e agrupamento
+             do Chrome em vez do app) -->
         <service
-            android:name="com.google.androidbrowserhelper.trusted.DelegationService"
-            android:exported="true" />
+            android:name=".BrandedNotificationDelegationService"
+            android:enabled="true"
+            android:exported="true">
+
+            <meta-data
+                android:name="android.support.customtabs.trusted.SMALL_ICON"
+                android:resource="@drawable/ic_stat_notify" />
+
+            <intent-filter>
+                <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
 
         <meta-data
             android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE"
