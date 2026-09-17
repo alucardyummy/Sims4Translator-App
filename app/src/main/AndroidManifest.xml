@@ -69,6 +69,12 @@
             </intent-filter>
         </service>
 
+        <!-- Sem essa Activity, o Chrome não tem como pedir a permissão nativa
+             POST_NOTIFICATIONS quando o site chama Notification.requestPermission()
+             dentro do app (TWA) — a origem fica "travada" numa permissão que
+             nunca chega a ser concedida de verdade no nível do sistema. -->
+        <activity android:name="com.google.androidbrowserhelper.trusted.NotificationPermissionRequestActivity" />
+
         <meta-data
             android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE"
             android:resource="@drawable/splash" />
