@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.Icon;
 import android.os.Build;
 
 import androidx.annotation.NonNull;
@@ -27,6 +28,13 @@ public class BrandedNotificationDelegationService extends DelegationService {
 
     private static final int BRAND_COLOR = Color.parseColor("#b89cd9");
 
+    // Grupo próprio das notificações do app. Sem isso, quando chegam 2 ou mais
+    // o Android cria um "resumo" automático com um ícone genérico dele
+    // (os quadradinhos empilhados). Criando o resumo nós mesmos, a gente
+    // escolhe o ícone (o fantasminha) e a cor roxa.
+    private static final String GROUP_KEY = "sims4translator_updates";
+    private static final int SUMMARY_ID = 1;
+
     @Override
     public boolean onNotifyNotificationWithChannel(
             @NonNull String platformTag,
@@ -41,6 +49,8 @@ public class BrandedNotificationDelegationService extends DelegationService {
             // recoverBuilder só existe a partir do Android 7 (API 24)
             Notification.Builder builder = Notification.Builder.recoverBuilder(this, notification);
             builder.setColor(BRAND_COLOR);
+            builder.setSmallIcon(Icon.createWithResource(this, R.drawable.ic_stat_notify));
+            builder.setGroup(GROUP_KEY);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 // Sem isso, notify() posta num canal que não existe e o
@@ -58,6 +68,36 @@ public class BrandedNotificationDelegationService extends DelegationService {
         }
 
         notificationManager.notify(platformTag, platformId, notification);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            postGroupSummary(notificationManager, channelName);
+        }
         return true;
+    }
+
+    /**
+     * Posta (ou atualiza) o resumo do grupo com o mesmo ícone e cor das
+     * notificações. Com só 1 notificação o Android nem mostra o resumo; com 2
+     * ou mais ele junta tudo embaixo dele. Quando a última notificação filha
+     * é dispensada, o Android remove o resumo sozinho.
+     */
+    private void postGroupSummary(NotificationManager notificationManager, String channelName) {
+        Notification.Builder summary;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            summary = new Notification.Builder(this, channelName);
+            // o resumo não toca/vibra de novo — quem avisa é a notificação filha
+            summary.setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN);
+        } else {
+            summary = new Notification.Builder(this);
+        }
+
+        summary.setSmallIcon(Icon.createWithResource(this, R.drawable.ic_stat_notify))
+                .setColor(BRAND_COLOR)
+                .setContentTitle(getString(R.string.app_name))
+                .setGroup(GROUP_KEY)
+                .setGroupSummary(true)
+                .setAutoCancel(true);
+
+        notificationManager.notify(GROUP_KEY, SUMMARY_ID, summary.build());
     }
 }
