@@ -66,7 +66,11 @@ public class BrandedNotificationDelegationService extends DelegationService {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 grouped = countOtherChildren(notificationManager, platformTag, platformId) >= 1;
-                applyConversationStyle(builder, notification, grouped);
+                if (grouped) {
+                    applyPlainStyle(builder);
+                } else {
+                    applyConversationStyle(builder, notification);
+                }
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -95,7 +99,7 @@ public class BrandedNotificationDelegationService extends DelegationService {
         notificationManager.notify(platformTag, platformId, notification);
 
         if (grouped && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            // as que já estavam na barra também perdem o avatar (sem tocar de novo)
+            // as que já estavam na barra também voltam ao visual antigo (sem tocar de novo)
             refreshOthersAsGrouped(notificationManager, platformTag, platformId);
         }
 
@@ -105,16 +109,13 @@ public class BrandedNotificationDelegationService extends DelegationService {
         return true;
     }
 
-    private void applyConversationStyle(
-            Notification.Builder builder, Notification original, boolean grouped) {
+    private void applyConversationStyle(Notification.Builder builder, Notification original) {
         Bundle extras = original.extras;
         CharSequence title = extras != null ? extras.getCharSequence(Notification.EXTRA_TITLE) : null;
         CharSequence text = extras != null ? extras.getCharSequence(Notification.EXTRA_TEXT) : null;
         String appName = getString(R.string.app_name);
 
-        Icon avatar = grouped
-                ? Icon.createWithResource(this, R.drawable.ic_conversation_transparent)
-                : Icon.createWithResource(this, R.drawable.ic_conversation);
+        Icon avatar = Icon.createWithResource(this, R.drawable.ic_conversation);
 
         Person me = new Person.Builder().setName(appName).build();
         Person sender = new Person.Builder()
@@ -137,6 +138,16 @@ public class BrandedNotificationDelegationService extends DelegationService {
             builder.setShortcutId(SHORTCUT_ID);
             builder.setLocusId(new LocusId(SHORTCUT_ID));
         }
+    }
+
+    private void applyPlainStyle(Notification.Builder builder) {
+        builder.setStyle(null);
+        builder.setCategory(null);
+        builder.setShortcutId(null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.setLocusId(null);
+        }
+        builder.setLargeIcon(Icon.createWithResource(this, R.drawable.ic_conversation_transparent));
     }
 
     private void publishConversationShortcut(Person person, String label, Icon avatar) {
@@ -168,14 +179,14 @@ public class BrandedNotificationDelegationService extends DelegationService {
         return count;
     }
 
-    /** Reposta as notificações que já estavam na barra, agora com avatar transparente. */
+    /** Reposta as notificações que já estavam na barra, agora no visual antigo (sem conversa). */
     private void refreshOthersAsGrouped(NotificationManager nm, String tag, int id) {
         for (StatusBarNotification sbn : nm.getActiveNotifications()) {
             if (isSummary(sbn) || isSame(sbn, tag, id)) continue;
             try {
                 Notification old = sbn.getNotification();
                 Notification.Builder b = Notification.Builder.recoverBuilder(this, old);
-                applyConversationStyle(b, old, true);
+                applyPlainStyle(b);
                 b.setOnlyAlertOnce(true);
                 nm.notify(sbn.getTag(), sbn.getId(), b.build());
             } catch (Exception ignored) {
