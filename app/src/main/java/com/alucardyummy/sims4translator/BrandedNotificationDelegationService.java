@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.os.Bundle;
+import android.service.notification.StatusBarNotification;
 
 import androidx.annotation.NonNull;
 
@@ -55,6 +56,7 @@ public class BrandedNotificationDelegationService extends DelegationService {
         NotificationManager notificationManager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
+        boolean grouped = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             // recoverBuilder só existe a partir do Android 7 (API 24)
             Notification.Builder builder = Notification.Builder.recoverBuilder(this, notification);
@@ -63,7 +65,8 @@ public class BrandedNotificationDelegationService extends DelegationService {
             builder.setGroup(GROUP_KEY);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                applyConversationStyle(builder, notification);
+                grouped = countOtherChildren(notificationManager, platformTag, platformId) >= 1;
+                applyConversationStyle(builder, notification, grouped);
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -91,40 +94,52 @@ public class BrandedNotificationDelegationService extends DelegationService {
 
         notificationManager.notify(platformTag, platformId, notification);
 
+        if (grouped && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // as que já estavam na barra também perdem o avatar (sem tocar de novo)
+            refreshOthersAsGrouped(notificationManager, platformTag, platformId);
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             postGroupSummary(notificationManager, channelName);
         }
         return true;
     }
 
-    private void applyConversationStyle(Notification.Builder builder, Notification original) {
+    private void applyConversationStyle(
+            Notification.Builder builder, Notification original, boolean grouped) {
         Bundle extras = original.extras;
         CharSequence title = extras != null ? extras.getCharSequence(Notification.EXTRA_TITLE) : null;
         CharSequence text = extras != null ? extras.getCharSequence(Notification.EXTRA_TEXT) : null;
         String appName = getString(R.string.app_name);
 
+        Icon avatar = grouped
+                ? Icon.createWithResource(this, R.drawable.ic_conversation_transparent)
+                : Icon.createWithResource(this, R.drawable.ic_conversation);
+
         Person me = new Person.Builder().setName(appName).build();
         Person sender = new Person.Builder()
                 .setName(title != null && title.length() > 0 ? title : appName)
-                .setIcon(Icon.createWithResource(this, R.drawable.ic_conversation))
+                .setIcon(avatar)
                 .setImportant(true)
                 .build();
 
         Notification.MessagingStyle style = new Notification.MessagingStyle(me);
-        style.addMessage(text != null ? text : "", System.currentTimeMillis(), sender);
+        style.addMessage(text != null ? text : "",
+                original.when != 0 ? original.when : System.currentTimeMillis(), sender);
 
         builder.setStyle(style);
+        builder.setLargeIcon(avatar);
         builder.setCategory(Notification.CATEGORY_MESSAGE);
         builder.addPerson(sender);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            publishConversationShortcut(sender, appName);
+            publishConversationShortcut(sender, appName, avatar);
             builder.setShortcutId(SHORTCUT_ID);
             builder.setLocusId(new LocusId(SHORTCUT_ID));
         }
     }
 
-    private void publishConversationShortcut(Person person, String label) {
+    private void publishConversationShortcut(Person person, String label, Icon avatar) {
         try {
             ShortcutManager shortcutManager = getSystemService(ShortcutManager.class);
             if (shortcutManager == null) return;
@@ -134,13 +149,48 @@ public class BrandedNotificationDelegationService extends DelegationService {
                     .setShortLabel(label)
                     .setLocusId(new LocusId(SHORTCUT_ID))
                     .setPerson(person)
-                    .setIcon(Icon.createWithResource(this, R.drawable.ic_conversation))
+                    .setIcon(avatar)
                     .setIntent(intent)
                     .build();
             shortcutManager.pushDynamicShortcut(shortcut);
         } catch (Exception ignored) {
             // se falhar, a notificação continua aparecendo normal (só sem a seção de Conversas)
         }
+    }
+
+    /** Quantas outras notificações (fora o resumo) do app estão na barra. */
+    private int countOtherChildren(NotificationManager nm, String tag, int id) {
+        int count = 0;
+        for (StatusBarNotification sbn : nm.getActiveNotifications()) {
+            if (isSummary(sbn) || isSame(sbn, tag, id)) continue;
+            count++;
+        }
+        return count;
+    }
+
+    /** Reposta as notificações que já estavam na barra, agora com avatar transparente. */
+    private void refreshOthersAsGrouped(NotificationManager nm, String tag, int id) {
+        for (StatusBarNotification sbn : nm.getActiveNotifications()) {
+            if (isSummary(sbn) || isSame(sbn, tag, id)) continue;
+            try {
+                Notification old = sbn.getNotification();
+                Notification.Builder b = Notification.Builder.recoverBuilder(this, old);
+                applyConversationStyle(b, old, true);
+                b.setOnlyAlertOnce(true);
+                nm.notify(sbn.getTag(), sbn.getId(), b.build());
+            } catch (Exception ignored) {
+                // se não der pra refazer uma, ela só continua com o avatar
+            }
+        }
+    }
+
+    private static boolean isSummary(StatusBarNotification sbn) {
+        return sbn.getId() == SUMMARY_ID && GROUP_KEY.equals(sbn.getTag());
+    }
+
+    private static boolean isSame(StatusBarNotification sbn, String tag, int id) {
+        return sbn.getId() == id
+                && (tag == null ? sbn.getTag() == null : tag.equals(sbn.getTag()));
     }
 
     private static String highChannelId(String channelName) {
