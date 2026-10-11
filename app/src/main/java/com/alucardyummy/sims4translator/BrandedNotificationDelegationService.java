@@ -3,10 +3,16 @@ package com.alucardyummy.sims4translator;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.Person;
 import android.content.Context;
+import android.content.Intent;
+import android.content.LocusId;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
 import android.graphics.Color;
 import android.graphics.drawable.Icon;
 import android.os.Build;
+import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
@@ -37,6 +43,8 @@ public class BrandedNotificationDelegationService extends DelegationService {
 
     private static final String HIGH_SUFFIX = "_alta";
 
+    private static final String SHORTCUT_ID = "sims4translator_novidades";
+
     @Override
     public boolean onNotifyNotificationWithChannel(
             @NonNull String platformTag,
@@ -53,6 +61,10 @@ public class BrandedNotificationDelegationService extends DelegationService {
             builder.setColor(BRAND_COLOR);
             builder.setSmallIcon(Icon.createWithResource(this, R.drawable.ic_stat_notify));
             builder.setGroup(GROUP_KEY);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                applyConversationStyle(builder, notification);
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 // Sem isso, notify() posta num canal que não existe e o
@@ -83,6 +95,52 @@ public class BrandedNotificationDelegationService extends DelegationService {
             postGroupSummary(notificationManager, channelName);
         }
         return true;
+    }
+
+    private void applyConversationStyle(Notification.Builder builder, Notification original) {
+        Bundle extras = original.extras;
+        CharSequence title = extras != null ? extras.getCharSequence(Notification.EXTRA_TITLE) : null;
+        CharSequence text = extras != null ? extras.getCharSequence(Notification.EXTRA_TEXT) : null;
+        String appName = getString(R.string.app_name);
+
+        Person me = new Person.Builder().setName(appName).build();
+        Person sender = new Person.Builder()
+                .setName(title != null && title.length() > 0 ? title : appName)
+                .setIcon(Icon.createWithResource(this, R.drawable.ic_stat_notify))
+                .setImportant(true)
+                .build();
+
+        Notification.MessagingStyle style = new Notification.MessagingStyle(me);
+        style.addMessage(text != null ? text : "", System.currentTimeMillis(), sender);
+
+        builder.setStyle(style);
+        builder.setCategory(Notification.CATEGORY_MESSAGE);
+        builder.addPerson(sender);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            publishConversationShortcut(sender, appName);
+            builder.setShortcutId(SHORTCUT_ID);
+            builder.setLocusId(new LocusId(SHORTCUT_ID));
+        }
+    }
+
+    private void publishConversationShortcut(Person person, String label) {
+        try {
+            ShortcutManager shortcutManager = getSystemService(ShortcutManager.class);
+            if (shortcutManager == null) return;
+            Intent intent = new Intent(this, UpdateActivity.class).setAction(Intent.ACTION_VIEW);
+            ShortcutInfo shortcut = new ShortcutInfo.Builder(this, SHORTCUT_ID)
+                    .setLongLived(true)
+                    .setShortLabel(label)
+                    .setLocusId(new LocusId(SHORTCUT_ID))
+                    .setPerson(person)
+                    .setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
+                    .setIntent(intent)
+                    .build();
+            shortcutManager.pushDynamicShortcut(shortcut);
+        } catch (Exception ignored) {
+            // se falhar, a notificação continua aparecendo normal (só sem a seção de Conversas)
+        }
     }
 
     private static String highChannelId(String channelName) {
