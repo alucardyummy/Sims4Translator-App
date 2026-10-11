@@ -35,6 +35,8 @@ public class BrandedNotificationDelegationService extends DelegationService {
     private static final String GROUP_KEY = "sims4translator_updates";
     private static final int SUMMARY_ID = 1;
 
+    private static final String HIGH_SUFFIX = "_alta";
+
     @Override
     public boolean onNotifyNotificationWithChannel(
             @NonNull String platformTag,
@@ -55,16 +57,24 @@ public class BrandedNotificationDelegationService extends DelegationService {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 // Sem isso, notify() posta num canal que não existe e o
                 // Android descarta a notificação sem avisar nada.
-                builder.setChannelId(channelName);
+                String channelId = highChannelId(channelName);
+                builder.setChannelId(channelId);
                 NotificationChannel channel = new NotificationChannel(
-                        channelName, channelName, NotificationManager.IMPORTANCE_DEFAULT);
+                        channelId, channelName, NotificationManager.IMPORTANCE_HIGH);
+                channel.enableVibration(true);
                 notificationManager.createNotificationChannel(channel);
+                notificationManager.deleteNotificationChannel(channelName);
+            } else {
+                builder.setPriority(Notification.PRIORITY_HIGH);
+                builder.setDefaults(Notification.DEFAULT_ALL);
             }
 
             notification = builder.build();
         } else {
             // No Android 5 e 6, o campo "color" já existe e pode ser setado direto
             notification.color = BRAND_COLOR;
+            notification.priority = Notification.PRIORITY_HIGH;
+            notification.defaults |= Notification.DEFAULT_ALL;
         }
 
         notificationManager.notify(platformTag, platformId, notification);
@@ -73,6 +83,10 @@ public class BrandedNotificationDelegationService extends DelegationService {
             postGroupSummary(notificationManager, channelName);
         }
         return true;
+    }
+
+    private static String highChannelId(String channelName) {
+        return channelName + HIGH_SUFFIX;
     }
 
     /**
@@ -84,7 +98,7 @@ public class BrandedNotificationDelegationService extends DelegationService {
     private void postGroupSummary(NotificationManager notificationManager, String channelName) {
         Notification.Builder summary;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            summary = new Notification.Builder(this, channelName);
+            summary = new Notification.Builder(this, highChannelId(channelName));
             // o resumo não toca/vibra de novo — quem avisa é a notificação filha
             summary.setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN);
         } else {
