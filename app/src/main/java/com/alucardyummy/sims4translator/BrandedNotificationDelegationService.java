@@ -106,7 +106,7 @@ public class BrandedNotificationDelegationService extends DelegationService {
         Person me = new Person.Builder().setName(appName).build();
         Person sender = new Person.Builder()
                 .setName(title != null && title.length() > 0 ? title : appName)
-                .setIcon(Icon.createWithResource(this, R.drawable.ic_stat_notify))
+                .setIcon(Icon.createWithResource(this, R.drawable.ic_conversation))
                 .setImportant(true)
                 .build();
 
@@ -134,7 +134,7 @@ public class BrandedNotificationDelegationService extends DelegationService {
                     .setShortLabel(label)
                     .setLocusId(new LocusId(SHORTCUT_ID))
                     .setPerson(person)
-                    .setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
+                    .setIcon(Icon.createWithResource(this, R.drawable.ic_conversation))
                     .setIntent(intent)
                     .build();
             shortcutManager.pushDynamicShortcut(shortcut);
